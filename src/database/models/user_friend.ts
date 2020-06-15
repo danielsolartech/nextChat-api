@@ -7,11 +7,15 @@ class UserFriend {
   id: number;
 
   @OneToOne((type) => User)
-  @JoinColumn()
+  @JoinColumn({
+    name: 'user_one',
+  })
   userOne: User;
 
   @OneToOne((type) => User)
-  @JoinColumn()
+  @JoinColumn({
+    name: 'user_two',
+  })
   userTwo: User;
 
   @Column({

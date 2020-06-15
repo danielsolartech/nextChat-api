@@ -8,7 +8,9 @@ class UserToken {
   id: number;
 
   @OneToOne((type) => User)
-  @JoinColumn()
+  @JoinColumn({
+    name: 'user_id',
+  })
   user: User;
 
   @Column()
@@ -17,17 +19,20 @@ class UserToken {
   @Column({
     type: 'enum',
     enum: TokenType,
+    nullable: false,
   })
   token: TokenType;
 
   @Column({
     type: 'timestamp',
+    nullable: false,
     default: () => 'CURRENT_TIMESTAMP',
   })
   created: string;
 
   @Column({
     type: 'timestamp',
+    nullable: false,
   })
   expire: number;
 }

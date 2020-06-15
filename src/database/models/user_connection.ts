@@ -7,7 +7,9 @@ class UserConnection {
   id: number;
 
   @OneToOne((type) => User)
-  @JoinColumn()
+  @JoinColumn({
+    name: 'user_id',
+  })
   user: User;
 
   @Column()
