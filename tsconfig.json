@@ -7,7 +7,7 @@
     "noImplicitAny": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "isolatedModules": false,
+    "isolatedModules": true,
     "importHelpers": true,
     "sourceMap": true,
     "outDir": "./build",
@@ -18,6 +18,15 @@
       ],
       "@Models/*": [
         "database/models/*.ts",
+      ],
+      "@Communication/*": [
+        "server/communication/*.ts",
+      ],
+      "@Controllers/*": [
+        "server/controllers/*.ts",
+      ],
+      "@Routes/*": [
+        "server/routes/*.ts",
       ],
       "@Core/*": [
         "*",

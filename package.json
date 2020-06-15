@@ -22,20 +22,27 @@
   "_moduleAliases": {
     "@NextChat": "src/manager/index.ts",
     "@Models": "src/database/models",
+    "@Communication": "src/server/communication",
+    "@Controllers": "src/server/controllers",
+    "@Routes": "src/server/routes",
     "@Core": "src"
   },
   "devDependencies": {
+    "@types/express": "^4.17.6",
     "@types/node": "^14.0.13",
+    "@types/socket.io": "^2.1.8",
     "nodemon": "^2.0.4",
     "ts-node": "^8.10.2",
     "typescript": "^3.9.5"
   },
   "dependencies": {
     "dotenv": "^8.2.0",
+    "express": "^4.17.1",
     "module-alias": "^2.2.2",
     "moment": "^2.26.0",
     "mysql": "^2.18.1",
     "reflect-metadata": "^0.1.13",
+    "socket.io": "^2.3.0",
     "typeorm": "^0.2.25"
   }
 }
