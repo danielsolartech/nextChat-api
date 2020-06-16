@@ -183,12 +183,19 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
       throw 'password||The password is incorrect.';
     }
 
+    const remember: boolean = req.body.remember;
+
     const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
     if (!ip || !ip.length) {
       throw new Error('Invalid ip.');
     }
 
-    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 1 * 60 * 60 * 1000, ip);
+    let expire: number = Date.now() + 1 * 60 * 60 * 1000;
+    if (remember) {
+      expire = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    }
+
+    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, expire, ip);
     if (!token) {
       throw new Error('The token was not created.');
     }
@@ -207,3 +214,51 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 };
+
+export const signOut = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userID: string = req.body.user_id;
+    const token: string = req.body.token;
+    const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
+
+    if (!userID || !ip) {
+      throw 'The user id is required.';
+    }
+
+    if (!token) {
+      throw 'The token is required.';
+    }
+
+    const id: number = Number(userID);
+    if (!id || id <= 0 || isNaN(id)) {
+      throw 'The user id is invalid.';
+    }
+
+    const user: User = await NextChat.getUsers().getById(id);
+    if (!user) {
+      throw 'The user does not exists.';
+    }
+
+    const userToken: UserToken = await user.getActiveToken(TokenType.WEB_ACCESS, token, ip)
+    if (userToken == null) {
+      throw 'The token is invalid.';
+    }
+
+    await NextChat.getDatabase().getUserTokens().delete({
+      id: userToken.id,
+    });
+
+    user.online = false;
+    user.lastOnline = new Date(Date.now()).toString();
+    await NextChat.getUsers().save(user);
+
+    res.status(200).jsonp({
+      status: true,
+    });
+
+    return;
+  } catch (error) {
+    sendError(res, error);
+    return;
+  }
+}
