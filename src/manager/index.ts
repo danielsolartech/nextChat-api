@@ -1,9 +1,11 @@
 import DatabaseManager from '@Core/database';
+import TextsManager from '@Core/texts';
 import UsersManager from '@Core/users';
 import ServerManager from '@Core/server';
 
 class NextChat {
   private static database: DatabaseManager;
+  private static texts: TextsManager;
   private static users: UsersManager;
   private static server: ServerManager;
 
@@ -26,6 +28,14 @@ class NextChat {
     return this.database;
   }
 
+  static getTexts(): TextsManager {
+    if (this.texts == null) {
+      this.texts = new TextsManager();
+    }
+
+    return this.texts;
+  }
+
   static getUsers(): UsersManager {
     if (this.users == null) {
       this.users = new UsersManager();
@@ -40,6 +50,10 @@ class NextChat {
     }
 
     return this.server;
+  }
+
+  static getUnix(): number {
+    return ~~(Date.now() / 1000);
   }
 
   static sleep(ms: number): Promise<void> {

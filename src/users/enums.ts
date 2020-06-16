@@ -5,5 +5,6 @@ export enum Gender {
 }
 
 export enum TokenType {
-  FORGET_ACCOUNT = 'fa',
+  FORGET_ACCOUNT = 'forget_account',
+  WEB_ACCESS = 'web_access',
 }

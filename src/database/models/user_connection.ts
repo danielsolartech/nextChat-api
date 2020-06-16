@@ -1,4 +1,4 @@
-import { Entity, OneToOne, JoinColumn, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, ManyToOne, JoinColumn, Column, PrimaryGeneratedColumn } from 'typeorm';
 import User from '@Models/user';
 
 @Entity('user_connections')
@@ -6,7 +6,7 @@ class UserConnection {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @OneToOne((type) => User)
+  @ManyToOne((type) => User)
   @JoinColumn({
     name: 'user_id',
   })

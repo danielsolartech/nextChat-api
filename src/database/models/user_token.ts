@@ -1,4 +1,4 @@
-import { Entity, Column, OneToOne, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
 import User from '@Models/user';
 import { TokenType } from '@Core/users/enums';
 
@@ -7,21 +7,27 @@ class UserToken {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @OneToOne((type) => User)
+  @ManyToOne((type) => User)
   @JoinColumn({
     name: 'user_id',
   })
   user: User;
-
-  @Column()
-  type: string;
 
   @Column({
     type: 'enum',
     enum: TokenType,
     nullable: false,
   })
-  token: TokenType;
+  type: TokenType;
+
+  @Column()
+  token: string;
+
+  @Column({
+    nullable: false,
+    default: '',
+  })
+  ip: string;
 
   @Column({
     type: 'timestamp',
@@ -34,7 +40,7 @@ class UserToken {
     type: 'timestamp',
     nullable: false,
   })
-  expire: number;
+  expire: string;
 }
 
 export default UserToken;

@@ -20,6 +20,9 @@ class CommunicationManager {
          
         if (user) {
           if (this.addConnection(connection)) {
+            user.online = true;
+            await NextChat.getUsers().save(user);
+
             console.log('Se ha conectado:', user.username);
             connection.getSocket().emit('ping', { beat: 1 });
           }
@@ -29,8 +32,12 @@ class CommunicationManager {
             connection.getSocket().emit('ping', data);
           });
 
-          connection.getSocket().on('disconnect', () => {
+          connection.getSocket().on('disconnect', async () => {
             if (this.removeConnection(connection)) {
+              user.online = false;
+              user.lastOnline = Date.now().toString();
+              await NextChat.getUsers().save(user);
+
               console.log('Se ha desconectado:', user.username);
             }
           });

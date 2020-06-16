@@ -1,6 +1,7 @@
 import { getConnectionManager, Connection, ConnectionManager, Repository } from 'typeorm';
 
 import Setting from '@Models/setting';
+import Text from '@Models/text';
 import User from '@Models/user';
 import UserConnection from '@Models/user_connection';
 import UserFriend from '@Models/user_friend';
@@ -22,6 +23,7 @@ class DatabaseManager {
       logging: false,
       entities: [
         Setting,
+        Text,
         User,
         UserConnection,
         UserFriend,
@@ -46,6 +48,10 @@ class DatabaseManager {
 
   getSettings(): Repository<Setting> {
     return this.getConnection().getRepository(Setting);
+  }
+
+  getTexts(): Repository<Text> {
+    return this.getConnection().getRepository(Text);
   }
 
   getUsers(): Repository<User> {

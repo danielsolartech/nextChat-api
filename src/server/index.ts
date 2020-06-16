@@ -4,7 +4,8 @@ import CommunicationManager from './communication';
 import Setting from '@Models/setting';
 import NextChat from '@NextChat';
 import { Repository } from 'typeorm';
-import { isNumber } from 'util';
+import * as Cors from 'cors';
+import UsersRoutes from '@Routes/users';
 
 class ServerManager {
   private app: Express.Express;
@@ -32,12 +33,12 @@ class ServerManager {
         host = await settings.save(setting);
       }
 
-      let port: Setting = await settings.findOne({ name: 'server_port' });
-      if (!port) {
+      let portS: Setting = await settings.findOne({ name: 'server_port' });
+      if (!portS) {
         setting.name = 'server_port';
         setting.value = '3000';
 
-        port = await settings.save(setting);
+        portS = await settings.save(setting);
       }
 
       let url: Setting = await settings.findOne({ name: 'server_url' });
@@ -48,15 +49,28 @@ class ServerManager {
         url = await settings.save(setting);
       }
 
-      if (host && port && url && isNumber(port.value)) {
-        this.settings = {
-          host: host.value,
-          port: Number(port.value),
-          url: url.value,
-        };
+      if (host && portS && url) {
+        const port: number = Number(portS.value);
+
+        if (port && !isNaN(port)) {
+          this.settings = {
+            host: host.value,
+            port,
+            url: url.value,
+          };
+        }
       }
 
       await this.getCommunication().initialize();
+
+      this.getApp().use(Cors({
+        optionsSuccessStatus: 200,
+      }));
+
+      this.getApp().use(Express.urlencoded({ extended: true }));
+      this.getApp().use(Express.json());
+
+      this.getApp().use('/users/', UsersRoutes);
     } catch (error) {
       await Promise.reject(error);
       return;

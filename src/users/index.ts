@@ -1,5 +1,6 @@
 import NextChat from '@NextChat';
 import User from '@Models/user';
+import { Gender } from './enums';
 
 class UsersManager {
 
@@ -15,7 +16,24 @@ class UsersManager {
     });
   }
 
-  async create(user: User): Promise<User> {
+  async getByEmail(email: string): Promise<User> {
+    return await NextChat.getDatabase().getUsers().findOne({
+      email,
+    });
+  }
+
+  async create(username: string, email: string, password: string, gender: Gender): Promise<User> {
+    const user: User = new User();
+
+    user.username = username;
+    user.email = email;
+    user.encryptPassword(password);
+    user.gender = gender;
+
+    return await this.save(user);
+  }
+
+  async save(user: User): Promise<User> {
     return await NextChat.getDatabase().getUsers().save(user);
   }
 
