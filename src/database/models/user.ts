@@ -5,6 +5,8 @@ import UserConnection from './user_connection';
 import NextChat from '@NextChat';
 import UserToken from './user_token';
 import * as Moment from 'moment';
+import PacketComposer from '@Communication/outgoing/index';
+import Connection from '@Communication/connection';
 
 interface IUser {
   id: number;
@@ -144,6 +146,19 @@ class User {
     token.expire = new Date(expire).toString();
 
     return await NextChat.getDatabase().getUserTokens().save(token);
+  }
+
+  async sendPacket(packet: PacketComposer): Promise<boolean> {
+    try {
+      const connection: Connection = NextChat.getServer().getCommunication().getConnection(this.id);
+      if (!connection) {
+        throw new Error('No connection for user.');
+      }
+
+      return await connection.sendPacket(packet);
+    } catch (error) {
+      return false;
+    }
   }
 
   toArray(): IUser {

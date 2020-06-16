@@ -2,6 +2,7 @@ import * as SocketIO from 'socket.io';
 import { Server } from 'http';
 import Connection from './connection';
 import NextChat from '@NextChat';
+import MarcoComposer from '@Communication/outgoing/handshake/marcoComposer';
 
 class CommunicationManager {
   private server: SocketIO.Server;
@@ -15,32 +16,19 @@ class CommunicationManager {
   async initialize(): Promise<void> {
     try {
       this.server.on('connection', async (socket: SocketIO.Socket) => {
-        const connection = new Connection(socket, socket.handshake.query.user_id);
+        const connection = new Connection(socket, Number(socket.handshake.query.user_id) || 0);
         const user = await connection.getUser();
-         
+
         if (user) {
           if (this.addConnection(connection)) {
             user.online = true;
             await NextChat.getUsers().save(user);
 
             console.log('Se ha conectado:', user.username);
-            connection.getSocket().emit('ping', { beat: 1 });
+            await user.sendPacket(new MarcoComposer(1));
+
+            connection.handleEvents();
           }
-
-          connection.getSocket().on('pong', async (data: { beat: number }) => {
-            await NextChat.sleep(5000);
-            connection.getSocket().emit('ping', data);
-          });
-
-          connection.getSocket().on('disconnect', async () => {
-            if (this.removeConnection(connection)) {
-              user.online = false;
-              user.lastOnline = Date.now().toString();
-              await NextChat.getUsers().save(user);
-
-              console.log('Se ha desconectado:', user.username);
-            }
-          });
         }
       });
     } catch (error) {
