@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
-import { generateCode } from '@Core/utils';
+import { generateCode, getIP } from '@Core/utils';
 import User from '@Models/user';
 import NextChat from '@NextChat';
 import { sendError } from '@Core/server/responses';
 import { Gender, TokenType } from '@Core/users/enums';
 import UserToken from '@Models/user_token';
+import { ERequest } from '..';
+import UserFriend from '@Models/user_friend';
 
 export const generateCaptcha = (req: Request, res: Response): void => {
   res.status(200).jsonp({
@@ -12,8 +14,12 @@ export const generateCaptcha = (req: Request, res: Response): void => {
   });
 };
 
-export const signUp = async (req: Request, res: Response): Promise<void> => {
+export const signUp = async (req: ERequest, res: Response): Promise<void> => {
   try {
+    if (req.user && req.token) {
+      throw 'username||You are authenticated.';
+    }
+
     const username: string = req.body.username;
     if (!username || !username.length) {
       throw 'username||You must enter an username.';
@@ -85,19 +91,14 @@ export const signUp = async (req: Request, res: Response): Promise<void> => {
       throw 'captcha||The captcha code is incorrect.';
     }
 
-    const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
-    if (!ip || !ip.length) {
-      throw new Error('Invalid ip.');
-    }
-
     const user: User = await NextChat.getUsers().create(username, email, password, gender === 'F' ? Gender.FEMALE : gender === 'M' ? Gender.MALE : Gender.UNKNOWN);
 
-    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 1 * 60 * 60 * 1000, ip);
+    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 1 * 60 * 60 * 1000, getIP(req));
     if (!token) {
       throw new Error('The token was not created.');
     }
 
-    await user.addConnection(ip);
+    await user.addConnection(getIP(req));
 
     res.status(200).jsonp({
       status: true,
@@ -107,53 +108,35 @@ export const signUp = async (req: Request, res: Response): Promise<void> => {
 
     return;
   } catch (error) {
-    sendError(res, error);
+    sendError('Users', 'Sign Up', res, error);
     return;
   }
 };
 
-export const getAuthInfo = async (req: Request, res: Response): Promise<void> => {
+export const getAuthInfo = async (req: ERequest, res: Response): Promise<void> => {
   try {
-    const userID: string = req.body.user_id;
-    const token: string = req.body.token;
-    const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
-
-    if (!userID || !ip) {
-      throw 'The user id is required.';
-    }
-
-    if (!token) {
-      throw 'The token is required.';
-    }
-
-    const id: number = Number(userID);
-    if (!id || id <= 0 || isNaN(id)) {
-      throw 'The user id is invalid.';
-    }
-
-    const user: User = await NextChat.getUsers().getById(id);
-    if (!user) {
-      throw 'The user does not exists.';
-    }
-
-    if (await user.getActiveToken(TokenType.WEB_ACCESS, token, ip) == null) {
-      throw 'The token is invalid.';
+    if (!req.user) {
+      throw 'Is not authenticated.';
     }
 
     res.status(200).jsonp({
       status: true,
-      data: user.toArray(),
+      data: await req.user.toArray(),
     });
 
     return;
   } catch (error) {
-    sendError(res, error);
+    sendError('Users', 'Auth Info', res, error);
     return;
   }
 }
 
-export const signIn = async (req: Request, res: Response): Promise<void> => {
+export const signIn = async (req: ERequest, res: Response): Promise<void> => {
   try {
+    if (req.user && req.token) {
+      throw 'account||You are authenticated.';
+    }
+
     const account: string = req.body.account;
     if (!account || !account.length) {
       throw 'account||You must enter your username or e-mail address.';
@@ -185,22 +168,17 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
 
     const remember: boolean = req.body.remember;
 
-    const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
-    if (!ip || !ip.length) {
-      throw new Error('Invalid ip.');
-    }
-
     let expire: number = Date.now() + 1 * 60 * 60 * 1000;
     if (remember) {
       expire = Date.now() + 365 * 24 * 60 * 60 * 1000;
     }
 
-    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, expire, ip);
+    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, expire, getIP(req));
     if (!token) {
       throw new Error('The token was not created.');
     }
 
-    await user.addConnection(ip);
+    await user.addConnection(getIP(req));
 
     res.status(200).jsonp({
       status: true,
@@ -210,47 +188,106 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
 
     return;
   } catch (error) {
-    sendError(res, error);
+    sendError('Users', 'Sign In', res, error);
     return;
   }
 };
 
-export const signOut = async (req: Request, res: Response): Promise<void> => {
+export const search = async (req: ERequest, res: Response): Promise<void> => {
   try {
-    const userID: string = req.body.user_id;
-    const token: string = req.body.token;
-    const ip: string = req.header('x-forwarded-for') ? req.header('x-forwarded-for')[0] : req.connection.remoteAddress || '';
-
-    if (!userID || !ip) {
-      throw 'The user id is required.';
+    if (!req.user || !req.token) {
+      throw 'Is not authenticated.';
     }
 
-    if (!token) {
-      throw 'The token is required.';
+    const search: string = req.body.search;
+    if (!search || search.length <= 3) {
+      throw 'Invalid search word.';
     }
 
-    const id: number = Number(userID);
-    if (!id || id <= 0 || isNaN(id)) {
-      throw 'The user id is invalid.';
+    let page: number = Number(req.body.page);
+    if (isNaN(page) || page < 1) {
+      page = 1;
     }
 
-    const user: User = await NextChat.getUsers().getById(id);
-    if (!user) {
+    let limit: number = Number(req.body.limit);
+    if (isNaN(limit) || limit < 10) {
+      limit = 10;
+    }
+
+    const users: User[] = await NextChat.getDatabase().getUsers()
+      .createQueryBuilder('user')
+      .where('user.username LIKE :search OR user.email LIKE :search', {
+        search: search + '%',
+      })
+      .orderBy('user.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(page * limit)
+      .getMany();
+
+    res.status(200).jsonp({
+      status: true,
+      data: users.map(async (user) => await user.toArray()),
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Search', res, error);
+    return;
+  }
+};
+
+export const profile = async (req: ERequest, res: Response): Promise<void> => {
+  try {
+    const profileUsername: string = req.params.username;
+    if (!profileUsername) {
+      throw new Error('The profile username is null.');
+    }
+
+    const profileUser: User = await NextChat.getUsers().getByUsername(profileUsername);
+    if (!profileUser) {
       throw 'The user does not exists.';
     }
 
-    const userToken: UserToken = await user.getActiveToken(TokenType.WEB_ACCESS, token, ip)
-    if (userToken == null) {
-      throw 'The token is invalid.';
+    if (req.user) {
+      const friend: UserFriend = await req.user.isFriend(profileUser);
+
+      res.status(200).jsonp({
+        status: true,
+        authenticated: true,
+        profile: await profileUser.toArray(),
+        is_owner: profileUser.id === req.user.id,
+        friend_type: friend ? friend.type : null,
+      });
+
+      return;
+    }
+
+    res.status(200).jsonp({
+      status: true,
+      authenticated: false,
+      profile: profileUser.toArray(),
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Profile', res, error);
+    return;
+  }
+};
+
+export const signOut = async (req: ERequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.token) {
+      throw 'Is not authenticated.';
     }
 
     await NextChat.getDatabase().getUserTokens().delete({
-      id: userToken.id,
+      id: req.token.id,
     });
 
-    user.online = false;
-    user.lastOnline = new Date(Date.now()).toString();
-    await NextChat.getUsers().save(user);
+    req.user.online = false;
+    req.user.lastOnline = new Date(Date.now()).toString();
+    await NextChat.getUsers().save(req.user);
 
     res.status(200).jsonp({
       status: true,
@@ -258,7 +295,7 @@ export const signOut = async (req: Request, res: Response): Promise<void> => {
 
     return;
   } catch (error) {
-    sendError(res, error);
+    sendError('Users', 'Sign Out', res, error);
     return;
   }
 }

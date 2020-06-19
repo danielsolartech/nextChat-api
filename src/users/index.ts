@@ -30,6 +30,62 @@ class UsersManager {
     user.encryptPassword(password);
     user.gender = gender;
 
+    let i = 0;
+    const getAvatar = (usernameI: string): string => {
+      switch(usernameI) {
+        case '.':
+        case ':':
+        case '-':
+        case '_': {
+          return getAvatar(username[i++].toLowerCase());
+        }
+
+        case 'á': {
+          return 'a';
+        }
+
+        case 'ć': {
+          return 'c';
+        }
+
+        case 'é': {
+          return 'e';
+        }
+
+        case 'í': {
+          return 'i';
+        }
+
+        case 'ó': {
+          return 'o';
+        }
+
+        case 'ú': {
+          return 'u';
+        }
+
+        case 'ñ':
+        case 'ń': {
+          return 'n';
+        }
+
+        case 'ý': {
+          return 'y';
+        }
+
+        case 'ź': {
+          return 'z';
+        }
+
+        default: {
+          return usernameI;
+        }
+      }
+    }
+
+    user.profileImage = 'https://danielsolartech.com/avatars/' + getAvatar(username[i].toLowerCase()) + '.png';
+    user.profileBanner = 'https://danielsolartech.com/banners/default.jpg';
+
     return await this.save(user);
   }
 

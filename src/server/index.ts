@@ -6,6 +6,16 @@ import NextChat from '@NextChat';
 import { Repository } from 'typeorm';
 import * as Cors from 'cors';
 import UsersRoutes from '@Routes/users';
+import TopsRoutes from '@Routes/tops';
+import User from '@Models/user';
+import UserToken from '@Models/user_token';
+import { TokenType } from '@Core/users/enums';
+import { getIP } from '@Core/utils';
+
+export interface ERequest extends Express.Request {
+  user: User | null;
+  token: UserToken | null;
+}
 
 class ServerManager {
   private app: Express.Express;
@@ -70,7 +80,43 @@ class ServerManager {
       this.getApp().use(Express.urlencoded({ extended: true }));
       this.getApp().use(Express.json());
 
+      // Authentication middleware
+      this.getApp().use(async (req: ERequest, res: Express.Response, next: Express.NextFunction) => {
+        try {
+          const authID: string = req.body.auth_id;
+          const authToken: string = req.body.auth_token;
+
+          if (!authID || !authToken) {
+            throw new Error('No data.');
+          }
+
+          const id: number = Number(authID);
+          if (!id || id <= 0 || isNaN(id)) {
+            throw new Error('The user id is invalid.');
+          }
+
+          const user: User = await NextChat.getUsers().getById(id);
+          if (!user) {
+            throw new Error('The user does not exists.');
+          }
+
+          const userToken: UserToken = await user.getActiveToken(TokenType.WEB_ACCESS, authToken, getIP(req));
+          if (userToken == null) {
+            throw new Error('The token is invalid.');
+          }
+
+          req.user = user;
+          req.token = userToken;
+        } catch (error) {
+          req.user = null;
+          req.token = null;
+        }
+
+        next();
+      });
+
       this.getApp().use('/users/', UsersRoutes);
+      this.getApp().use('/tops/', TopsRoutes);
     } catch (error) {
       await Promise.reject(error);
       return;

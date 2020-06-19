@@ -5,6 +5,7 @@ import Text from '@Models/text';
 import User from '@Models/user';
 import UserConnection from '@Models/user_connection';
 import UserFriend from '@Models/user_friend';
+import UserNotification from '@Models/user_notification';
 import UserToken from '@Models/user_token';
 
 class DatabaseManager {
@@ -27,6 +28,7 @@ class DatabaseManager {
         User,
         UserConnection,
         UserFriend,
+        UserNotification,
         UserToken,
       ],
     });
@@ -64,6 +66,10 @@ class DatabaseManager {
 
   getUserFriends(): Repository<UserFriend> {
     return this.getConnection().getRepository(UserFriend);
+  }
+
+  getUserNotifications(): Repository<UserNotification> {
+    return this.getConnection().getRepository(UserNotification);
   }
 
   getUserTokens(): Repository<UserToken> {

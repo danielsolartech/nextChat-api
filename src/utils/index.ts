@@ -1,4 +1,13 @@
 import * as BigInt from 'big-integer';
+import { Request } from 'express';
+
+export const getIP = (req: Request): string => {
+  if (req.header('x-forwarded-for')) {
+    return req.header('x-forwarded-for');
+  }
+
+  return req.connection.remoteAddress;
+};
 
 export const getRandomPrime = (bits: number): BigInt.BigInteger => {
   const min = BigInt.one.shiftLeft(bits - 1);

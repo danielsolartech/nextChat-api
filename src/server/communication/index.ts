@@ -1,8 +1,7 @@
 import * as SocketIO from 'socket.io';
 import { Server } from 'http';
 import Connection from './connection';
-import NextChat from '@NextChat';
-import MarcoComposer from '@Communication/outgoing/handshake/marcoComposer';
+import StartConnectionComposer from '@Communication/outgoing/handshake/startConectionComposer';
 
 class CommunicationManager {
   private server: SocketIO.Server;
@@ -21,13 +20,7 @@ class CommunicationManager {
 
         if (user) {
           if (this.addConnection(connection)) {
-            user.online = true;
-            await NextChat.getUsers().save(user);
-
-            console.log('Se ha conectado:', user.username);
-            await user.sendPacket(new MarcoComposer(1));
-
-            connection.handleEvents();
+            await user.sendPacket(new StartConnectionComposer(user, connection));
           }
         }
       });

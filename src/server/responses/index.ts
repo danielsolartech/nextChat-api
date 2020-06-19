@@ -1,11 +1,11 @@
 import { Response } from 'express';
 
-export const sendError = (res: Response, error: any): void => {
+export const sendError = (controller: string, route: string, res: Response, error: any): void => {
   let message: string = '';
   if (!(error instanceof Error) && typeof error === 'string') {
     message = error;
   } else {
-    console.log('Users Controllers: Sign in:', error);
+    console.log(controller + ' Controllers: ' + route + ':', error);
     message = 'An error was ocurred.';
   }
 

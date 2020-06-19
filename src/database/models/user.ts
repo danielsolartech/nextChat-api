@@ -7,8 +7,12 @@ import UserToken from './user_token';
 import * as Moment from 'moment';
 import PacketComposer from '@Communication/outgoing/index';
 import Connection from '@Communication/connection';
+import UserNotification, { NotificationType, NotificationMessage } from './user_notification';
+import NotificationCountComposer from '@Communication/outgoing/users/notificationCountComposer';
+import NewNotificationComposer from '@Communication/outgoing/users/newNotificationComposer';
+import UserFriend, { FriendType } from './user_friend';
 
-interface IUser {
+export interface IUser {
   id: number;
   username: string;
   email: string;
@@ -16,6 +20,10 @@ interface IUser {
   account_created: number;
   online: boolean;
   last_online: number;
+  online_time: number;
+  profile_image: string;
+  profile_banner: string;
+  followers: number;
 }
 
 @Entity('users')
@@ -86,6 +94,23 @@ class User {
   })
   lastOnline: string;
 
+  @Column({
+    name: 'online_time',
+    nullable: false,
+    default: 0,
+  })
+  onlineTime: number;
+
+  @Column({
+    name: 'profile_image',
+  })
+  profileImage: string;
+
+  @Column({
+    name: 'profile_banner',
+  })
+  profileBanner: string;
+
   async addConnection(ip: string): Promise<UserConnection> {
     const connection: UserConnection = new UserConnection();
 
@@ -93,6 +118,60 @@ class User {
     connection.ip = ip;
 
     return await NextChat.getDatabase().getUserConnections().save(connection);
+  }
+
+  async getFollowers(): Promise<UserFriend[]> {
+    try {
+      return await NextChat.getDatabase().getUserFriends().find({
+        userTwo: this,
+        type: FriendType.FOLLOW,
+      });
+    } catch (error) {
+      await Promise.reject(error);
+      return [];
+    }
+  }
+
+  async isFriend(user: User): Promise<UserFriend> {
+    try {
+      let friend: UserFriend = await NextChat.getDatabase().getUserFriends().findOne({
+        userOne: this,
+        userTwo: user,
+      });
+
+      if (!friend) {
+        friend = await NextChat.getDatabase().getUserFriends().findOne({
+          userOne: user,
+          userTwo: this,
+        });
+      }
+
+      return friend;
+    } catch (error) {
+      await Promise.reject(error);
+      return null;
+    }
+  }
+
+  async sendNotificationCount(): Promise<boolean> {
+    return await this.sendPacket(new NotificationCountComposer(this));
+  }
+
+  async sendNotification(type: NotificationType, message: NotificationMessage): Promise<UserNotification> {
+    const notification: UserNotification = new UserNotification();
+
+    notification.user = this;
+    notification.type = type;
+    notification.message = message;
+
+    await NextChat.getDatabase().getUserNotifications().save(notification);
+
+    if (this.online) {
+      await this.sendPacket(new NewNotificationComposer(notification));
+      await this.sendNotificationCount();
+    }
+
+    return notification;
   }
 
   async getToken(type: TokenType): Promise<UserToken> {
@@ -161,7 +240,7 @@ class User {
     }
   }
 
-  toArray(): IUser {
+  async toArray(): Promise<IUser> {
     return {
       id: this.id,
       username: this.username,
@@ -170,7 +249,11 @@ class User {
       account_created: Moment(this.accountCreated).unix(),
       online: this.online,
       last_online: Moment(this.lastOnline).unix(),
-    }
+      online_time: this.onlineTime,
+      profile_image: this.profileImage,
+      profile_banner: this.profileBanner,
+      followers: (await this.getFollowers()).length,
+    };
   }
 }
 
