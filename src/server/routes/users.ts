@@ -7,6 +7,8 @@ router.post('/captcha', UserController.generateCaptcha);
 router.post('/signup', UserController.signUp);
 router.post('/auth', UserController.getAuthInfo);
 router.post('/signin', UserController.signIn);
+router.post('/verify', UserController.sendVerifyToken);
+router.patch('/verify', UserController.checkVerifyToken);
 router.post('/search', UserController.search);
 router.post('/info/:username', UserController.profile);
 router.delete('/signout', UserController.signOut);

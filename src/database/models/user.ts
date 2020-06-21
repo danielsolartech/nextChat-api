@@ -1,9 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
-import { Gender, TokenType } from '@Core/users/enums';
 import { generateKeys, encryptMessage, generateCode } from '@Core/utils';
 import UserConnection from './user_connection';
 import NextChat from '@NextChat';
-import UserToken from './user_token';
+import UserToken, { TokenType } from './user_token';
 import * as Moment from 'moment';
 import PacketComposer from '@Communication/outgoing/index';
 import Connection from '@Communication/connection';
@@ -12,18 +11,35 @@ import NotificationCountComposer from '@Communication/outgoing/users/notificatio
 import NewNotificationComposer from '@Communication/outgoing/users/newNotificationComposer';
 import UserFriend, { FriendType } from './user_friend';
 
+export enum Gender {
+  FEMALE = 'F',
+  MALE = 'M',
+  UNKNOWN = 'U',
+}
+
+export interface ILinks {
+  name: string;
+  link: string;
+}
+
 export interface IUser {
   id: number;
   username: string;
   email: string;
   gender: Gender;
+  biography: string;
+  verified: boolean;
+  verified_sended: boolean;
   account_created: number;
   online: boolean;
   last_online: number;
   online_time: number;
   profile_image: string;
   profile_banner: string;
+  links: ILinks[];
   followers: number;
+  following: number;
+  friends: number;
 }
 
 @Entity('users')
@@ -72,6 +88,16 @@ class User {
     return encryptMessage(password, this.passwordKey) === this.password;
   }
 
+  @Column()
+  biography: string;
+
+  @Column({
+    type: 'boolean',
+    nullable: false,
+    default: false,
+  })
+  verified: boolean;
+
   @Column({
     name: 'account_created',
     type: 'timestamp',
@@ -111,6 +137,11 @@ class User {
   })
   profileBanner: string;
 
+  @Column({
+    type: 'simple-array',
+  })
+  links: ILinks[];
+
   async addConnection(ip: string): Promise<UserConnection> {
     const connection: UserConnection = new UserConnection();
 
@@ -126,6 +157,37 @@ class User {
         userTwo: this,
         type: FriendType.FOLLOW,
       });
+    } catch (error) {
+      await Promise.reject(error);
+      return [];
+    }
+  }
+
+  async getFollowing(): Promise<UserFriend[]> {
+    try {
+      return await NextChat.getDatabase().getUserFriends().find({
+        userOne: this,
+        type: FriendType.FOLLOW,
+      });
+    } catch (error) {
+      await Promise.reject(error);
+      return [];
+    }
+  }
+
+  async getFriends(): Promise<UserFriend[]> {
+    try {
+      let users: UserFriend[] = await NextChat.getDatabase().getUserFriends().find({
+        userOne: this,
+        type: FriendType.FRIEND,
+      });
+
+      users.concat(await NextChat.getDatabase().getUserFriends().find({
+        userTwo: this,
+        type: FriendType.FRIEND,
+      }));
+
+      return users;
     } catch (error) {
       await Promise.reject(error);
       return [];
@@ -241,18 +303,29 @@ class User {
   }
 
   async toArray(): Promise<IUser> {
+    let verified_sended: boolean = false;
+    if (await this.getToken(TokenType.VERIFY_ACCOUNT)) {
+      verified_sended = true;
+    }
+
     return {
       id: this.id,
       username: this.username,
       email: this.email,
       gender: this.gender,
+      biography: this.biography,
+      verified: this.verified,
+      verified_sended,
       account_created: Moment(this.accountCreated).unix(),
       online: this.online,
       last_online: Moment(this.lastOnline).unix(),
       online_time: this.onlineTime,
       profile_image: this.profileImage,
       profile_banner: this.profileBanner,
+      links: this.links,
       followers: (await this.getFollowers()).length,
+      following: (await this.getFollowing()).length,
+      friends: (await this.getFriends()).length,
     };
   }
 }

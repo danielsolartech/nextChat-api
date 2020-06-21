@@ -1,6 +1,5 @@
 import NextChat from '@NextChat';
-import User from '@Models/user';
-import { Gender } from './enums';
+import User, { Gender } from '@Models/user';
 
 class UsersManager {
 
@@ -32,7 +31,7 @@ class UsersManager {
 
     let i = 0;
     const getAvatar = (usernameI: string): string => {
-      switch(usernameI) {
+      switch (usernameI) {
         case '.':
         case ':':
         case '-':

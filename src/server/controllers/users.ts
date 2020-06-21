@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
 import { generateCode, getIP } from '@Core/utils';
-import User from '@Models/user';
+import User, { IUser, Gender } from '@Models/user';
 import NextChat from '@NextChat';
 import { sendError } from '@Core/server/responses';
-import { Gender, TokenType } from '@Core/users/enums';
-import UserToken from '@Models/user_token';
+import UserToken, { TokenType } from '@Models/user_token';
 import { ERequest } from '..';
-import UserFriend from '@Models/user_friend';
+import { sendVerifyAccountEmail } from '@Core/email/templates';
 
 export const generateCaptcha = (req: Request, res: Response): void => {
   res.status(200).jsonp({
@@ -77,25 +76,15 @@ export const signUp = async (req: ERequest, res: Response): Promise<void> => {
       throw new Error('The gender is invalid: ' + gender);
     }
 
-    const captcha: string = req.body.captcha;
-    if (!captcha || !captcha.length) {
-      throw 'captcha||You must enter the captcha code.';
-    }
-
-    const captchaAnswer: string = req.body.captcha_answer;
-    if (!captchaAnswer || captchaAnswer.length !== 6) {
-      throw new Error('The captcha answer is invalid');
-    }
-
-    if (captcha !== captchaAnswer) {
-      throw 'captcha||The captcha code is incorrect.';
-    }
-
     const user: User = await NextChat.getUsers().create(username, email, password, gender === 'F' ? Gender.FEMALE : gender === 'M' ? Gender.MALE : Gender.UNKNOWN);
 
-    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 1 * 60 * 60 * 1000, getIP(req));
+    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 365 * 24 * 60 * 60 * 1000, getIP(req));
     if (!token) {
       throw new Error('The token was not created.');
+    }
+
+    if (!(await sendVerifyAccountEmail(user.email, { ip: token.ip }))) {
+      throw new Error('The verify account token was not created.');
     }
 
     await user.addConnection(getIP(req));
@@ -166,14 +155,7 @@ export const signIn = async (req: ERequest, res: Response): Promise<void> => {
       throw 'password||The password is incorrect.';
     }
 
-    const remember: boolean = req.body.remember;
-
-    let expire: number = Date.now() + 1 * 60 * 60 * 1000;
-    if (remember) {
-      expire = Date.now() + 365 * 24 * 60 * 60 * 1000;
-    }
-
-    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, expire, getIP(req));
+    const token: UserToken = await user.addToken(TokenType.WEB_ACCESS, Date.now() + 365 * 24 * 60 * 60 * 1000, getIP(req));
     if (!token) {
       throw new Error('The token was not created.');
     }
@@ -193,14 +175,72 @@ export const signIn = async (req: ERequest, res: Response): Promise<void> => {
   }
 };
 
-export const search = async (req: ERequest, res: Response): Promise<void> => {
+export const sendVerifyToken = async (req: ERequest, res: Response): Promise<void> => {
   try {
     if (!req.user || !req.token) {
-      throw 'Is not authenticated.';
+      throw new Error('Is not authenticated.');
     }
 
+    if (req.user.verified) {
+      throw new Error('The user already verified.');
+    }
+
+    await sendVerifyAccountEmail(req.user.email, { ip: getIP(req) });
+
+    res.status(200).jsonp({
+      status: true,
+      email: req.user.email.slice(0, 3) + req.user.email.split('').slice(4, req.user.email.indexOf('@')).map((x) => '*').join('') + '@' + req.user.email.split('@')[1],
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Send Verify Token', res, error);
+    return;
+  }
+};
+
+export const checkVerifyToken = async (req: ERequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.token) {
+      throw new Error('Is not authenticated.');
+    }
+
+    if (req.user.verified) {
+      throw new Error('The user already verified.');
+    }
+
+    const verifyToken: string = req.body.token;
+    if (!verifyToken || !verifyToken.length) {
+      throw new Error('The verify token is null.');
+    }
+
+    const token: UserToken = await req.user.getActiveToken(TokenType.VERIFY_ACCOUNT, verifyToken, getIP(req));
+    if (!token) {
+      throw new Error('The verify token is invalid.');
+    }
+
+    await NextChat.getDatabase().getUserTokens().delete({
+      id: token.id,
+    });
+
+    req.user.verified = true;
+    await NextChat.getUsers().save(req.user);
+
+    res.status(200).jsonp({
+      status: true,
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Check Verify Token', res, error);
+    return;
+  }
+};
+
+export const search = async (req: ERequest, res: Response): Promise<void> => {
+  try {
     const search: string = req.body.search;
-    if (!search || search.length <= 3) {
+    if (!search || !search.length) {
       throw 'Invalid search word.';
     }
 
@@ -224,9 +264,16 @@ export const search = async (req: ERequest, res: Response): Promise<void> => {
       .take(page * limit)
       .getMany();
 
+    const data: IUser[] = [];
+    if (users.length > 0) {
+      for await (let user of users) {
+        data.push(await user.toArray());
+      }
+    }
+
     res.status(200).jsonp({
       status: true,
-      data: users.map(async (user) => await user.toArray()),
+      data,
     });
 
     return;
@@ -249,14 +296,11 @@ export const profile = async (req: ERequest, res: Response): Promise<void> => {
     }
 
     if (req.user) {
-      const friend: UserFriend = await req.user.isFriend(profileUser);
-
       res.status(200).jsonp({
         status: true,
         authenticated: true,
         profile: await profileUser.toArray(),
         is_owner: profileUser.id === req.user.id,
-        friend_type: friend ? friend.type : null,
       });
 
       return;
@@ -265,7 +309,7 @@ export const profile = async (req: ERequest, res: Response): Promise<void> => {
     res.status(200).jsonp({
       status: true,
       authenticated: false,
-      profile: profileUser.toArray(),
+      profile: await profileUser.toArray(),
     });
 
     return;

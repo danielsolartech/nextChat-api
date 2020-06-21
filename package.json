@@ -37,6 +37,7 @@
     "typescript": "^3.9.5"
   },
   "dependencies": {
+    "@sendgrid/mail": "^7.2.0",
     "big-integer": "^1.6.48",
     "cors": "^2.8.5",
     "dotenv": "^8.2.0",

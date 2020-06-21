@@ -8,8 +8,7 @@ import * as Cors from 'cors';
 import UsersRoutes from '@Routes/users';
 import TopsRoutes from '@Routes/tops';
 import User from '@Models/user';
-import UserToken from '@Models/user_token';
-import { TokenType } from '@Core/users/enums';
+import UserToken, { TokenType } from '@Models/user_token';
 import { getIP } from '@Core/utils';
 
 export interface ERequest extends Express.Request {

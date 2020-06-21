@@ -1,6 +1,11 @@
 import { Entity, Column, ManyToOne, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
 import User from '@Models/user';
-import { TokenType } from '@Core/users/enums';
+
+export enum TokenType {
+  WEB_ACCESS = 'web_access',
+  VERIFY_ACCOUNT = 'verify_account',
+  FORGET_ACCOUNT = 'forget_account',
+}
 
 @Entity('user_tokens')
 class UserToken {

@@ -3,6 +3,7 @@
 
 # Development
 .env
+sendgrid.env
 
 # Production
 /build/
