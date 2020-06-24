@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import * as Cors from 'cors';
 import UsersRoutes from '@Routes/users';
 import TopsRoutes from '@Routes/tops';
+import FriendsRoutes from '@Routes/friends';
 import User from '@Models/user';
 import UserToken, { TokenType } from '@Models/user_token';
 import { getIP } from '@Core/utils';
@@ -116,6 +117,7 @@ class ServerManager {
 
       this.getApp().use('/users/', UsersRoutes);
       this.getApp().use('/tops/', TopsRoutes);
+      this.getApp().use('/friends/', FriendsRoutes);
     } catch (error) {
       await Promise.reject(error);
       return;

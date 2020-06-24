@@ -3,6 +3,7 @@ import { getConnectionManager, Connection, ConnectionManager, Repository } from 
 import Setting from '@Models/setting';
 import Text from '@Models/text';
 import User from '@Models/user';
+import UserAction from '@Models/user_action';
 import UserConnection from '@Models/user_connection';
 import UserFriend from '@Models/user_friend';
 import UserNotification from '@Models/user_notification';
@@ -22,10 +23,12 @@ class DatabaseManager {
       database: 'nextchat',
       synchronize: true,
       logging: false,
+      charset: 'utf8mb4',
       entities: [
         Setting,
         Text,
         User,
+        UserAction,
         UserConnection,
         UserFriend,
         UserNotification,
@@ -58,6 +61,10 @@ class DatabaseManager {
 
   getUsers(): Repository<User> {
     return this.getConnection().getRepository(User);
+  }
+
+  getUserActions(): Repository<UserAction> {
+    return this.getConnection().getRepository(UserAction);
   }
 
   getUserConnections(): Repository<UserConnection> {

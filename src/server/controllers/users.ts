@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { generateCode, getIP } from '@Core/utils';
-import User, { IUser, Gender } from '@Models/user';
+import User, { IUser, Gender, ILinks } from '@Models/user';
 import NextChat from '@NextChat';
 import { sendError } from '@Core/server/responses';
 import UserToken, { TokenType } from '@Models/user_token';
 import { ERequest } from '..';
 import { sendVerifyAccountEmail } from '@Core/email/templates';
+import UserAction, { ActionType } from '@Models/user_action';
+import UserFriend from '@Models/user_friend';
 
 export const generateCaptcha = (req: Request, res: Response): void => {
   res.status(200).jsonp({
@@ -59,7 +61,7 @@ export const signUp = async (req: ERequest, res: Response): Promise<void> => {
     }
 
     if (!(/^[a-zA-Z0-9.-]*$/.test(password))) {
-      throw 'password||he password can not contains special characters or spaces.';
+      throw 'password||The password can not contains special characters or spaces.';
     }
 
     const repeatPassword: string = req.body.repeat_password;
@@ -296,11 +298,18 @@ export const profile = async (req: ERequest, res: Response): Promise<void> => {
     }
 
     if (req.user) {
+      const friendRequest: UserFriend = await req.user.isFriendRequest(profileUser);
+
       res.status(200).jsonp({
         status: true,
         authenticated: true,
         profile: await profileUser.toArray(),
         is_owner: profileUser.id === req.user.id,
+        is_following: (await req.user.isFollowing(profileUser)) != null,
+        is_follower: (await req.user.isFollower(profileUser)) != null,
+        is_friend: (await req.user.isFriend(profileUser)) != null,
+        is_friend_request: friendRequest != null,
+        options_friend_request: friendRequest && friendRequest.userOne.id === req.user.id,
       });
 
       return;
@@ -315,6 +324,197 @@ export const profile = async (req: ERequest, res: Response): Promise<void> => {
     return;
   } catch (error) {
     sendError('Users', 'Profile', res, error);
+    return;
+  }
+};
+
+export const saveProfileSettings = async (req: ERequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.token) {
+      throw new Error('Is not authenticated.');
+    }
+
+    let changed: boolean = false;
+
+    const username: string = req.body.username;
+    if (req.user.username !== username) {
+      if (!username || !username.length) {
+        throw 'username||You must enter an username.';
+      }
+
+      if (username.length < 4 || username.length > 25) {
+        throw 'username||The username only contains between 4 and 25 characters.';
+      }
+
+      if (!(/^[a-zA-Z0-9.:_-]*$/.test(username))) {
+        throw 'username||The username can not contains special characters or spaces.';
+      }
+
+      if (await NextChat.getUsers().getByUsername(username)) {
+        throw 'username||The username already exists.';
+      }
+
+      const action: UserAction = await req.user.getAction(ActionType.CHANGE_USERNAME);
+      if (action && action.checkTime(14, 0, 0, 0)) {
+        throw 'username||You only can change your username every 14 days.';
+      }
+
+      await req.user.addAction(ActionType.CHANGE_USERNAME, getIP(req));
+      req.user.username = username;
+
+      changed = true;
+    }
+
+    const biography: string = req.body.biography;
+    if (req.user.biography !== biography) {
+      if (biography.length > 200) {
+        throw 'biography||The biography only can be contains 200 characteres.';
+      }
+
+      req.user.biography = biography;
+      changed = true;
+    }
+
+    const links: ILinks[] = req.body.links;
+    if (links) {
+      let diff: boolean = false;
+
+      if ((req.user.links || []).length !== links.length) {
+        diff = true;
+      } else if ((req.user.links || []).length) {
+        req.user.links.forEach((link, i) => {
+          const l: ILinks = links[i];
+          if (!l || (l.name.toLowerCase() === link.name.toLowerCase() && l.link.toLowerCase() !== link.link.toLowerCase())) {
+            diff = true;
+          }
+        });
+      } else if (links.length) {
+        diff = true;
+      }
+
+      if (diff) {
+        let isValid: boolean = true;
+
+        for (let link of links) {
+          link.name = link.name.toLowerCase();
+
+          if ((link.name === 'instagram' || link.name === 'facebook' || link.name === 'whatsapp' || link.name === 'twitter'
+            || link.name === 'github') && link.link.length > 5) {
+            continue;
+          }
+
+          isValid = false;
+        }
+
+        if (!isValid) {
+          throw 'links||The links are invalid.';
+        }
+
+        req.user.links = links;
+        changed = true;
+      }
+    }
+
+    const gender: string = req.body.gender;
+    if (gender) {
+      const g: Gender = gender === 'F' ? Gender.FEMALE : gender === 'M' ? Gender.MALE : Gender.UNKNOWN;
+      if (req.user.gender !== g) {
+        req.user.gender = g;
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      throw new Error('No changes.');
+    }
+
+    await NextChat.getUsers().save(req.user);
+
+    res.status(200).jsonp({
+      status: true,
+      user: await req.user.toArray(),
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Save Profile Settings', res, error);
+    return;
+  }
+}
+
+export const changePassword = async (req: ERequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.token) {
+      throw new Error('Is not authenticated.');
+    }
+
+    const action: UserAction = await req.user.getAction(ActionType.CHANGE_PASSWORD);
+    if (action && action.checkTime(7, 0, 0, 0)) {
+      throw 'current_password||You only can change your password every 7 days.';
+    }
+
+    const currentPassword: string = req.body.current_password;
+    if (!currentPassword || !currentPassword.length) {
+      throw 'current_password||You must enter your current password.';
+    }
+
+    if (!req.user.checkPassword(currentPassword)) {
+      throw 'current_password||The current password is incorrect.';
+    }
+
+    const newPassword: string = req.body.new_password;
+    if (!newPassword || !newPassword.length) {
+      throw 'new_password||You must enter the new password.';
+    }
+
+    if (newPassword.length < 8 || newPassword.length > 40) {
+      throw 'new_password||The new password only contains between 8 and 40 characters.';
+    }
+
+    if (!(/^[a-zA-Z0-9.-]*$/.test(newPassword))) {
+      throw 'new_password||The new password can not contains special characters or spaces.';
+    }
+
+    if (req.user.checkPassword(newPassword)) {
+      throw 'new_password||The new password can not be same to your current password.';
+    }
+
+    const repeatNewPassword: string = req.body.repeat_new_password;
+    if (!repeatNewPassword || !repeatNewPassword.length) {
+      throw 'repeat_new_password||You must re enter the new password.';
+    }
+
+    if (repeatNewPassword !== newPassword) {
+      throw 'repeat_new_password||The passwords do not match.';
+    }
+
+    const tokens: UserToken[] = await NextChat.getDatabase().getUserTokens().find({
+      type: TokenType.WEB_ACCESS,
+      user: req.user,
+    });
+
+    if (tokens.length) {
+      for await (let token of tokens) {
+        if (token.ip === getIP(req)) {
+          continue;
+        }
+
+        await NextChat.getDatabase().getUserTokens().delete({ id: token.id });
+      }
+    }
+
+    await req.user.addAction(ActionType.CHANGE_PASSWORD, getIP(req));
+
+    req.user.encryptPassword(newPassword);
+    await NextChat.getUsers().save(req.user);
+
+    res.status(200).jsonp({
+      status: true,
+    });
+
+    return;
+  } catch (error) {
+    sendError('Users', 'Change Password', res, error);
     return;
   }
 };

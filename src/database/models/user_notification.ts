@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Column } from 't
 import User from '@Models/user';
 
 export enum NotificationType {
+  NEW_FOLLOWER = 'new_follower',
   FRIEND_REQUEST = 'friend_request',
   FRIEND_ACCEPT = 'friend_accept',
 }

@@ -12,8 +12,9 @@ class NewNotificationComposer extends PacketComposer {
 
   async execute(): Promise<void> {
     this.writeString(this.notification.type);
-    
+
     switch (this.notification.type) {
+      case NotificationType.NEW_FOLLOWER:
       case NotificationType.FRIEND_ACCEPT:
       case NotificationType.FRIEND_REQUEST: {
         const user: User = await NextChat.getUsers().getById(this.notification.message.actor_id);
@@ -21,7 +22,9 @@ class NewNotificationComposer extends PacketComposer {
         this.writeBoolean(user != undefined && user != null);
         if (user) {
           this.writeString(user.username);
+          this.writeString(user.profileImage);
         }
+
         break;
       }
     }

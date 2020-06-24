@@ -10,6 +10,7 @@ import UserNotification, { NotificationType, NotificationMessage } from './user_
 import NotificationCountComposer from '@Communication/outgoing/users/notificationCountComposer';
 import NewNotificationComposer from '@Communication/outgoing/users/newNotificationComposer';
 import UserFriend, { FriendType } from './user_friend';
+import UserAction, { ActionType } from './user_action';
 
 export enum Gender {
   FEMALE = 'F',
@@ -88,7 +89,12 @@ class User {
     return encryptMessage(password, this.passwordKey) === this.password;
   }
 
-  @Column()
+  @Column({
+    type: 'varchar',
+    length: 250,
+    charset: 'utf8m4',
+    collation: 'utf8mb4_unicode_ci',
+  })
   biography: string;
 
   @Column({
@@ -138,9 +144,32 @@ class User {
   profileBanner: string;
 
   @Column({
-    type: 'simple-array',
+    type: 'json',
   })
   links: ILinks[];
+
+  async getActions(type: ActionType): Promise<UserAction[]> {
+    return await NextChat.getDatabase().getUserActions()
+      .createQueryBuilder('action')
+      .leftJoinAndSelect('action.user', 'User')
+      .orderBy('action.addedTime', 'DESC')
+      .where('action.type = :type', { type })
+      .getMany();
+  }
+
+  async getAction(type: ActionType): Promise<UserAction> {
+    return (await this.getActions(type))[0] || null;
+  }
+
+  async addAction(type: ActionType, ip: string): Promise<UserAction> {
+    const action: UserAction = new UserAction();
+
+    action.type = type;
+    action.user = this;
+    action.ip = ip;
+
+    return await NextChat.getDatabase().getUserActions().save(action);
+  }
 
   async addConnection(ip: string): Promise<UserConnection> {
     const connection: UserConnection = new UserConnection();
@@ -152,42 +181,133 @@ class User {
   }
 
   async getFollowers(): Promise<UserFriend[]> {
-    try {
-      return await NextChat.getDatabase().getUserFriends().find({
-        userTwo: this,
+    const users: any[] = await NextChat.getDatabase().getUserFriends()
+      .createQueryBuilder('uf')
+      .select('uf.userOne', 'user_id')
+      .addSelect('uf.timestamp', 'timestamp')
+      .addSelect('uf.id', 'id')
+      .where('uf.userTwo = :user AND type = :type', {
+        user: this.id,
         type: FriendType.FOLLOW,
-      });
-    } catch (error) {
-      await Promise.reject(error);
-      return [];
+      })
+      .getRawMany();
+
+    const data: UserFriend[] = [];
+    if (users.length) {
+      for await (let user of users) {
+        const u: User = await NextChat.getUsers().getById(user.user_id);
+
+        if (u) {
+          data.push({
+            id: user.id,
+            userOne: u,
+            userTwo: this,
+            timestamp: user.timestamp,
+            type: FriendType.FOLLOW,
+          });
+        }
+      }
     }
+
+    return data;
+  }
+
+  async isFollower(user: User): Promise<UserFriend> {
+    const followers: UserFriend[] = await this.getFollowers();
+    let follower: UserFriend = null;
+
+    if (followers.length) {
+      for (let f of followers) {
+        if (f.userOne.id === user.id) {
+          follower = f;
+          break;
+        }
+      }
+    }
+
+    return follower;
   }
 
   async getFollowing(): Promise<UserFriend[]> {
-    try {
-      return await NextChat.getDatabase().getUserFriends().find({
-        userOne: this,
+    const users: any[] = await NextChat.getDatabase().getUserFriends()
+      .createQueryBuilder('uf')
+      .select('uf.userTwo', 'user_id')
+      .addSelect('uf.timestamp', 'timestamp')
+      .addSelect('uf.id', 'id')
+      .where('uf.userOne = :user AND type = :type', {
+        user: this.id,
         type: FriendType.FOLLOW,
-      });
-    } catch (error) {
-      await Promise.reject(error);
-      return [];
+      })
+      .getRawMany();
+
+    const data: UserFriend[] = [];
+    if (users.length) {
+      for await (let user of users) {
+        const u: User = await NextChat.getUsers().getById(user.user_id);
+
+        if (u) {
+          data.push({
+            id: user.id,
+            userOne: this,
+            userTwo: u,
+            timestamp: user.timestamp,
+            type: FriendType.FOLLOW,
+          });
+        }
+      }
     }
+
+    return data;
+  }
+
+  async isFollowing(user: User): Promise<UserFriend> {
+    const followings: UserFriend[] = await this.getFollowing();
+    let following: UserFriend = null;
+
+    if (followings.length) {
+      for (let f of followings) {
+        if (f.userTwo.id === user.id) {
+          following = f;
+          break;
+        }
+      }
+    }
+
+    return following;
   }
 
   async getFriends(): Promise<UserFriend[]> {
     try {
-      let users: UserFriend[] = await NextChat.getDatabase().getUserFriends().find({
-        userOne: this,
-        type: FriendType.FRIEND,
-      });
+      const users: any[] = await NextChat.getDatabase().getUserFriends()
+        .createQueryBuilder('uf')
+        .select('uf.id', 'id')
+        .addSelect('uf.userOne', 'user_one')
+        .addSelect('uf.userTwo', 'user_two')
+        .addSelect('uf.timestamp', 'timestamp')
+        .where('uf.userOne = :user AND type = :type OR uf.userTwo = :user AND type = :type', {
+          user: this.id,
+          type: FriendType.FRIEND,
+        })
+        .getRawMany();
 
-      users.concat(await NextChat.getDatabase().getUserFriends().find({
-        userTwo: this,
-        type: FriendType.FRIEND,
-      }));
+      const data: UserFriend[] = [];
+      if (users.length) {
+        for await (let user of users) {
+          const u: User = await NextChat.getUsers().getById(user.user_one == this.id ? user.user_two : user.user_one);
 
-      return users;
+          if (u) {
+            data.push({
+              id: user.id,
+              userOne: user.user_one == this.id ? this : u,
+              userTwo: user.user_two == this.id ? this : u,
+              timestamp: user.timestamp,
+              type: FriendType.FRIEND,
+            });
+          }
+        }
+      }
+
+      return data;
     } catch (error) {
       await Promise.reject(error);
       return [];
@@ -195,24 +315,73 @@ class User {
   }
 
   async isFriend(user: User): Promise<UserFriend> {
-    try {
-      let friend: UserFriend = await NextChat.getDatabase().getUserFriends().findOne({
-        userOne: this,
-        userTwo: user,
-      });
+    const userFriend: UserFriend[] = await this.getFriends();
+    let friend: UserFriend = null;
 
-      if (!friend) {
-        friend = await NextChat.getDatabase().getUserFriends().findOne({
-          userOne: user,
-          userTwo: this,
-        });
+    if (userFriend.length) {
+      for (let u of userFriend) {
+        if (u.userOne.id === user.id || u.userTwo.id === user.id) {
+          friend = u;
+          break;
+        }
+      }
+    }
+
+    return friend;
+  }
+
+  async getFriendRequests(): Promise<UserFriend[]> {
+    try {
+      const users: any[] = await NextChat.getDatabase().getUserFriends()
+        .createQueryBuilder('uf')
+        .select('uf.id', 'id')
+        .addSelect('uf.userOne', 'user_one')
+        .addSelect('uf.userTwo', 'user_two')
+        .addSelect('uf.timestamp', 'timestamp')
+        .where('uf.userOne = :user AND type = :type OR uf.userTwo = :user AND type = :type', {
+          user: this.id,
+          type: FriendType.FRIEND_REQUEST,
+        })
+        .getRawMany();
+
+      const data: UserFriend[] = [];
+      if (users.length) {
+        for await (let user of users) {
+          const u: User = await NextChat.getUsers().getById(user.user_one == this.id ? user.user_two : user.user_one);
+
+          if (u) {
+            data.push({
+              id: user.id,
+              userOne: user.user_one == this.id ? this : u,
+              userTwo: user.user_two == this.id ? this : u,
+              timestamp: user.timestamp,
+              type: FriendType.FRIEND_REQUEST,
+            });
+          }
+        }
       }
 
-      return friend;
+      return data;
     } catch (error) {
       await Promise.reject(error);
-      return null;
+      return [];
     }
+  }
+
+  async isFriendRequest(user: User): Promise<UserFriend> {
+    const userFriend: UserFriend[] = await this.getFriendRequests();
+    let friend: UserFriend = null;
+
+    if (userFriend.length) {
+      for (let u of userFriend) {
+        if (u.userOne.id === user.id || u.userTwo.id === user.id) {
+          friend = u;
+          break;
+        }
+      }
+    }
+
+    return friend;
   }
 
   async sendNotificationCount(): Promise<boolean> {
@@ -234,6 +403,33 @@ class User {
     }
 
     return notification;
+  }
+
+  async removeNotification(type: NotificationType, message: NotificationMessage): Promise<void> {
+    const notifications: any[] = await NextChat.getDatabase().getUserNotifications()
+      .createQueryBuilder('un')
+      .select('un.id', 'id')
+      .addSelect('un.readed', 'readed')
+      .addSelect('un.message', 'message')
+      .where('un.type = :type && un.user = :user', {
+        type,
+        user: this.id,
+      })
+      .getRawMany();
+
+    if (notifications.length) {
+      for await (let notification of notifications) {
+        if (notification.message == JSON.stringify(message)) {
+          await NextChat.getDatabase().getUserNotifications().delete({ id: notification.id });
+
+          if (!notification.readed) {
+            await this.sendNotificationCount();
+          }
+
+          break;
+        }
+      }
+    }
   }
 
   async getToken(type: TokenType): Promise<UserToken> {
